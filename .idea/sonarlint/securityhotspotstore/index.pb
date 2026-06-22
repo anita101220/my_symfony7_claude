@@ -1,0 +1,21 @@
+
+a
+1src/Domain/Repository/BookRepositoryInterface.php,3\8\38c30cbdaa2b4ddf44d5755a023abab11ffff222
+9
+	README.md,8\e\8ec9a00bfd09b3190ac6b22251dbb1aa95a0579d
+h
+8src/Infrastructure/Repository/DoctrineBookRepository.php,c\b\cbe431ca2dad0ca8c6ef59a868c1de6a3a3a2b1d
+]
+-src/Application/Handler/CreateBookHandler.php,3\2\32ec70878e1051a260b770445e73bf032e36cb43
+J
+src/Domain/Entity/Book.php,6\d\6d0eced58c60dcbb940eeab2d796ddad3cbe6c0a
+c
+3src/Domain/Exception/BookAlreadyExistsException.php,f\3\f3f89ab0e70cc05a80c0bf559802c9ae6f860897
+a
+1src/Application/DTO/Request/CreateBookRequest.php,3\8\380650bb0a9de11a3277be8c99b5872e79a027bb
+]
+-src/Application/Handler/DeleteBookHandler.php,c\6\c6b528f12d63463c3009faa21d84e406801bc24d
+^
+.src/Domain/Exception/BookNotFoundException.php,a\6\a63fa16f7978b4421ee456277d810c7e2e0d76a1
+h
+8tests/Unit/Application/Handler/CreateBookHandlerTest.php,c\a\caa740b222762848cdcd39ab6e24f860947a96d6

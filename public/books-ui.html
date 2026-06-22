@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Books API</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    #books-tbody tr { cursor: pointer; }
+    #books-tbody .btn { cursor: default; }
+    #loading-overlay { display: none; }
+    #empty-state { display: none; }
+    #books-table { display: none; }
+    .price-cell { font-variant-numeric: tabular-nums; font-family: monospace; }
+    #books-tbody tr:hover td { background-color: rgba(13,110,253,.04); }
+    .modal-backdrop + .modal-backdrop { z-index: 1060; }
+  </style>
+</head>
+<body class="bg-light">
+
+<!-- Navbar -->
+<nav class="navbar navbar-dark bg-primary shadow-sm">
+  <div class="container-fluid">
+    <span class="navbar-brand mb-0 h1"><i class="bi bi-book me-2"></i>Books API</span>
+    <span class="navbar-text text-white-50 small" id="api-url-display"></span>
+  </div>
+</nav>
+
+<!-- Toast Container -->
+<div class="position-fixed top-0 end-0 p-3" style="z-index: 1100">
+  <div id="toast-container"></div>
+</div>
+
+<!-- Main Content -->
+<div class="container-fluid py-4 px-4">
+
+  <!-- Toolbar -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <button class="btn btn-primary" id="btn-add-book">
+      <i class="bi bi-plus-lg me-1"></i>Add New Book
+    </button>
+    <div class="input-group" style="max-width: 300px;">
+      <span class="input-group-text"><i class="bi bi-search"></i></span>
+      <input type="text" class="form-control" id="search-input" placeholder="Search title, author, ISBN…">
+    </div>
+  </div>
+
+  <!-- Loading Spinner -->
+  <div id="loading-overlay" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading…</span>
+    </div>
+    <p class="mt-2 text-muted">Loading books…</p>
+  </div>
+
+  <!-- Empty State -->
+  <div id="empty-state" class="text-center py-5">
+    <i class="bi bi-book display-4 text-muted"></i>
+    <p class="mt-3 text-muted">No books found. Add your first book!</p>
+  </div>
+
+  <!-- Books Table -->
+  <div class="card shadow-sm" id="books-table">
+    <div class="card-body p-0">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-3">Title</th>
+            <th>Author</th>
+            <th>ISBN</th>
+            <th class="text-end price-cell">Price</th>
+            <th class="text-center pe-3">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="books-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal 1: Book Form (Add / Edit) -->
+<div class="modal fade" id="bookFormModal" tabindex="-1" aria-labelledby="bookFormModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <form id="book-form" novalidate>
+        <div class="modal-header">
+          <h5 class="modal-title" id="bookFormModalLabel">Add New Book</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Server-side error alert -->
+          <div class="alert alert-danger d-none" id="form-error-alert" role="alert"></div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="field-title" class="form-label">Title <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="field-title" name="title" maxlength="255" autocomplete="off">
+              <div class="invalid-feedback" id="err-title"></div>
+            </div>
+            <div class="col-md-6">
+              <label for="field-author" class="form-label">Author <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="field-author" name="author" maxlength="255" autocomplete="off">
+              <div class="invalid-feedback" id="err-author"></div>
+            </div>
+            <div class="col-md-6">
+              <label for="field-isbn" class="form-label">ISBN <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="field-isbn" name="isbn" maxlength="17" autocomplete="off" placeholder="e.g. 978-3-16-148410-0">
+              <div class="invalid-feedback" id="err-isbn"></div>
+              <div class="form-text">ISBN-10 or ISBN-13, with or without dashes.</div>
+            </div>
+            <div class="col-md-6">
+              <label for="field-price" class="form-label">Price <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text">$</span>
+                <input type="number" class="form-control" id="field-price" name="price" step="0.01" min="0" placeholder="0.00">
+              </div>
+              <div class="invalid-feedback d-block" id="err-price"></div>
+            </div>
+            <div class="col-12">
+              <label for="field-description" class="form-label">Description</label>
+              <textarea class="form-control" id="field-description" name="description" rows="4" maxlength="5000" placeholder="Optional description…"></textarea>
+              <div class="invalid-feedback" id="err-description"></div>
+              <div class="form-text">Optional. Maximum 5000 characters.</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-form-submit">
+            <span id="btn-form-submit-text">Save Book</span>
+            <span id="btn-form-submit-spinner" class="spinner-border spinner-border-sm d-none ms-1" role="status"></span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 2: Book Detail (View) -->
+<div class="modal fade" id="bookDetailModal" tabindex="-1" aria-labelledby="bookDetailModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bookDetailModalLabel"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <dl class="row mb-0" id="detail-body"></dl>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="btn-detail-edit">
+          <i class="bi bi-pencil me-1"></i>Edit This Book
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 3: Delete Confirmation -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteModalLabel">Delete Book</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0">Are you sure you want to delete <strong id="delete-book-title"></strong>? This action cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="btn-confirm-delete">
+          <span id="btn-delete-text"><i class="bi bi-trash me-1"></i>Delete</span>
+          <span id="btn-delete-spinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+  /*
+   * HOW TO CONFIGURE THE API URL
+   *
+   * Option A — Symfony dev server (recommended, avoids CORS):
+   *   Run: php -S localhost:8000 -t public/   OR   symfony server:start
+   *   Open: http://localhost:8000/books-ui.html
+   *   API_BASE: 'http://localhost:8000/api/books'
+   *
+   * Option B — XAMPP with mod_rewrite:
+   *   API_BASE: 'http://localhost/portfolioclaude/public/api/books'
+   *
+   * Option C — XAMPP without mod_rewrite:
+   *   API_BASE: 'http://localhost/portfolioclaude/public/index.php/api/books'
+   *
+   * NOTE: If the HTML and API are on different ports, the browser will block
+   * requests due to CORS. Use Option A (same origin) to avoid this.
+   */
+  // Derive API base from the directory this HTML file lives in.
+  // Works for both php -S localhost:8000 and XAMPP subdirectory installs.
+  const _pageDir = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+  const CONFIG = {
+    API_BASE: _pageDir + 'api/books',
+  };
+
+  document.getElementById('api-url-display').textContent = CONFIG.API_BASE;
+
+  const state = {
+    books: [],
+    editingId: null,
+    deletingId: null,
+    currentDetailBook: null,
+  };
+
+  const modals = {
+    form: null,
+    detail: null,
+    delete: null,
+  };
+
+  // ─── API Layer ──────────────────────────────────────────────────────────────
+
+  const api = {
+    async request(method, path, body) {
+      const opts = {
+        method,
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+
+      let res;
+      try {
+        res = await fetch(CONFIG.API_BASE + path, opts);
+      } catch (networkErr) {
+        const err = new Error('Could not reach the server. Is Symfony running?');
+        err.errors = [];
+        err.status = 0;
+        throw err;
+      }
+
+      if (res.status === 204) return { success: true, data: null };
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        const err = new Error(json.message || 'An unexpected error occurred.');
+        err.errors = json.errors || [];
+        err.status = res.status;
+        throw err;
+      }
+      return json;
+    },
+
+    list()              { return this.request('GET', ''); },
+    create(payload)     { return this.request('POST', '', payload); },
+    update(id, payload) { return this.request('PUT', `/${id}`, payload); },
+    delete(id)          { return this.request('DELETE', `/${id}`); },
+  };
+
+  // ─── Toasts ─────────────────────────────────────────────────────────────────
+
+  function showToast(type, message) {
+    const bgClass = type === 'success' ? 'bg-success text-white'
+                  : type === 'error'   ? 'bg-danger text-white'
+                  :                      'bg-info text-dark';
+
+    const el = document.createElement('div');
+    el.className = `toast align-items-center ${bgClass} border-0 mb-2`;
+    el.setAttribute('role', 'alert');
+    el.setAttribute('aria-live', 'assertive');
+    el.innerHTML = `
+      <div class="d-flex">
+        <div class="toast-body">${escapeHtml(message)}</div>
+        <button type="button" class="btn-close ${type === 'info' ? '' : 'btn-close-white'} me-2 m-auto" data-bs-dismiss="toast"></button>
+      </div>`;
+
+    document.getElementById('toast-container').appendChild(el);
+    const toast = new bootstrap.Toast(el, { delay: 4000, autohide: true });
+    toast.show();
+    el.addEventListener('hidden.bs.toast', () => el.remove());
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ─── Books List ──────────────────────────────────────────────────────────────
+
+  async function loadBooks() {
+    showLoading(true);
+    try {
+      const json = await api.list();
+      state.books = json.data || [];
+      renderBooks(state.books);
+    } catch (err) {
+      showToast('error', err.message);
+      renderBooks([]);
+    } finally {
+      showLoading(false);
+    }
+  }
+
+  function showLoading(on) {
+    document.getElementById('loading-overlay').style.display = on ? 'block' : 'none';
+    if (on) {
+      document.getElementById('books-table').style.display = 'none';
+      document.getElementById('empty-state').style.display = 'none';
+    }
+  }
+
+  function renderBooks(books) {
+    const tbody = document.getElementById('books-tbody');
+    const table = document.getElementById('books-table');
+    const empty = document.getElementById('empty-state');
+
+    if (!books.length) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    table.style.display = 'block';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = books.map(book => `
+      <tr data-id="${escapeHtml(book.id)}">
+        <td class="ps-3">${escapeHtml(book.title)}</td>
+        <td>${escapeHtml(book.author)}</td>
+        <td><code>${escapeHtml(book.isbn)}</code></td>
+        <td class="text-end price-cell">$${parseFloat(book.price).toFixed(2)}</td>
+        <td class="text-center pe-3">
+          <button class="btn btn-sm btn-outline-primary btn-edit me-1" data-id="${escapeHtml(book.id)}">
+            <i class="bi bi-pencil"></i> Edit
+          </button>
+          <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${escapeHtml(book.id)}">
+            <i class="bi bi-trash"></i> Delete
+          </button>
+        </td>
+      </tr>`).join('');
+  }
+
+  // ─── Detail Modal ────────────────────────────────────────────────────────────
+
+  function showDetail(book) {
+    state.currentDetailBook = book;
+    document.getElementById('bookDetailModalLabel').textContent = book.title;
+
+    const fmt = iso => iso ? new Date(iso).toLocaleString() : '—';
+    const detail = document.getElementById('detail-body');
+    detail.innerHTML = `
+      ${detailRow('Title', escapeHtml(book.title))}
+      ${detailRow('Author', escapeHtml(book.author))}
+      ${detailRow('ISBN', `<code>${escapeHtml(book.isbn)}</code>`)}
+      ${detailRow('Price', `$${parseFloat(book.price).toFixed(2)}`)}
+      ${detailRow('Description', book.description ? escapeHtml(book.description).replace(/\n/g, '<br>') : '<span class="text-muted">—</span>')}
+      ${detailRow('Created', fmt(book.createdAt))}
+      ${detailRow('Updated', fmt(book.updatedAt))}
+      ${detailRow('ID', `<small class="text-muted font-monospace">${escapeHtml(book.id)}</small>`)}
+    `;
+
+    modals.detail.show();
+  }
+
+  function detailRow(label, value) {
+    return `<dt class="col-sm-3">${label}</dt><dd class="col-sm-9">${value}</dd>`;
+  }
+
+  // ─── Form Modal ──────────────────────────────────────────────────────────────
+
+  function openAddForm() {
+    state.editingId = null;
+    document.getElementById('bookFormModalLabel').textContent = 'Add New Book';
+    document.getElementById('btn-form-submit-text').textContent = 'Save Book';
+    clearForm();
+    modals.form.show();
+  }
+
+  function openEditForm(book) {
+    state.editingId = book.id;
+    document.getElementById('bookFormModalLabel').textContent = 'Edit Book';
+    document.getElementById('btn-form-submit-text').textContent = 'Update Book';
+    clearForm();
+
+    document.getElementById('field-title').value = book.title;
+    document.getElementById('field-author').value = book.author;
+    document.getElementById('field-isbn').value = book.isbn;
+    document.getElementById('field-price').value = parseFloat(book.price).toFixed(2);
+    document.getElementById('field-description').value = book.description || '';
+
+    modals.form.show();
+  }
+
+  function clearForm() {
+    const form = document.getElementById('book-form');
+    form.reset();
+    clearFormErrors();
+  }
+
+  function clearFormErrors() {
+    document.getElementById('form-error-alert').classList.add('d-none');
+    document.getElementById('form-error-alert').textContent = '';
+    ['title', 'author', 'isbn', 'price', 'description'].forEach(f => {
+      const el = document.getElementById(`field-${f}`);
+      if (el) { el.classList.remove('is-invalid', 'is-valid'); }
+      const errEl = document.getElementById(`err-${f}`);
+      if (errEl) errEl.textContent = '';
+    });
+  }
+
+  function validateForm() {
+    let valid = true;
+
+    function setField(name, errorMsg) {
+      const el = document.getElementById(`field-${name}`);
+      const errEl = document.getElementById(`err-${name}`);
+      if (errorMsg) {
+        el.classList.add('is-invalid');
+        el.classList.remove('is-valid');
+        if (errEl) errEl.textContent = errorMsg;
+        valid = false;
+      } else {
+        el.classList.remove('is-invalid');
+        el.classList.add('is-valid');
+        if (errEl) errEl.textContent = '';
+      }
+    }
+
+    const title = document.getElementById('field-title').value.trim();
+    setField('title', !title ? 'Title is required.' : title.length > 255 ? 'Title must not exceed 255 characters.' : '');
+
+    const author = document.getElementById('field-author').value.trim();
+    setField('author', !author ? 'Author is required.' : author.length > 255 ? 'Author must not exceed 255 characters.' : '');
+
+    const isbn = document.getElementById('field-isbn').value.trim();
+    const isbnDigits = isbn.replace(/-/g, '');
+    const isbnValid = isbn.length > 0 && /^[\d-]{10,17}$/.test(isbn) && (isbnDigits.length === 10 || isbnDigits.length === 13);
+    setField('isbn', !isbn ? 'ISBN is required.' : !isbnValid ? 'Enter a valid ISBN-10 or ISBN-13 (dashes optional).' : '');
+
+    const priceRaw = document.getElementById('field-price').value;
+    const price = parseFloat(priceRaw);
+    setField('price', priceRaw === '' ? 'Price is required.' : isNaN(price) || price < 0 ? 'Price must be a non-negative number.' : '');
+
+    const desc = document.getElementById('field-description').value;
+    setField('description', desc.length > 5000 ? 'Description must not exceed 5000 characters.' : '');
+
+    return valid;
+  }
+
+  function showFieldErrors(errors) {
+    errors.forEach(({ field, message }) => {
+      const el = document.getElementById(`field-${field}`);
+      const errEl = document.getElementById(`err-${field}`);
+      if (el) { el.classList.add('is-invalid'); el.classList.remove('is-valid'); }
+      if (errEl) errEl.textContent = message;
+    });
+
+    const alert = document.getElementById('form-error-alert');
+    alert.textContent = 'Please correct the highlighted fields.';
+    alert.classList.remove('d-none');
+  }
+
+  async function handleFormSubmit(e) {
+    e.preventDefault();
+    clearFormErrors();
+
+    if (!validateForm()) return;
+
+    const payload = {
+      title: document.getElementById('field-title').value.trim(),
+      author: document.getElementById('field-author').value.trim(),
+      isbn: document.getElementById('field-isbn').value.trim(),
+      price: parseFloat(document.getElementById('field-price').value),
+      description: document.getElementById('field-description').value.trim() || null,
+    };
+
+    const submitBtn = document.getElementById('btn-form-submit');
+    const spinner = document.getElementById('btn-form-submit-spinner');
+    submitBtn.disabled = true;
+    spinner.classList.remove('d-none');
+
+    try {
+      if (state.editingId) {
+        await api.update(state.editingId, payload);
+        modals.form.hide();
+        showToast('success', 'Book updated successfully.');
+      } else {
+        await api.create(payload);
+        modals.form.hide();
+        showToast('success', 'Book added successfully.');
+      }
+      await loadBooks();
+    } catch (err) {
+      if (err.status === 422 && err.errors && err.errors.length) {
+        showFieldErrors(err.errors);
+      } else if (err.status === 409) {
+        const alert = document.getElementById('form-error-alert');
+        alert.textContent = err.message;
+        alert.classList.remove('d-none');
+      } else {
+        showToast('error', err.message);
+      }
+    } finally {
+      submitBtn.disabled = false;
+      spinner.classList.add('d-none');
+    }
+  }
+
+  // ─── Delete Flow ─────────────────────────────────────────────────────────────
+
+  function openDeleteConfirm(book) {
+    state.deletingId = book.id;
+    document.getElementById('delete-book-title').textContent = book.title;
+    modals.delete.show();
+  }
+
+  async function handleConfirmDelete() {
+    const deleteBtn = document.getElementById('btn-confirm-delete');
+    const spinner = document.getElementById('btn-delete-spinner');
+    const text = document.getElementById('btn-delete-text');
+    deleteBtn.disabled = true;
+    spinner.classList.remove('d-none');
+    text.classList.add('d-none');
+
+    try {
+      await api.delete(state.deletingId);
+      modals.delete.hide();
+      showToast('success', 'Book deleted successfully.');
+      await loadBooks();
+    } catch (err) {
+      modals.delete.hide();
+      showToast('error', err.message);
+    } finally {
+      deleteBtn.disabled = false;
+      spinner.classList.add('d-none');
+      text.classList.remove('d-none');
+      state.deletingId = null;
+    }
+  }
+
+  // ─── Event Wiring ────────────────────────────────────────────────────────────
+
+  document.addEventListener('DOMContentLoaded', () => {
+    modals.form   = new bootstrap.Modal(document.getElementById('bookFormModal'));
+    modals.detail = new bootstrap.Modal(document.getElementById('bookDetailModal'));
+    modals.delete = new bootstrap.Modal(document.getElementById('deleteModal'));
+
+    document.getElementById('btn-add-book').addEventListener('click', openAddForm);
+    document.getElementById('book-form').addEventListener('submit', handleFormSubmit);
+    document.getElementById('btn-confirm-delete').addEventListener('click', handleConfirmDelete);
+
+    document.getElementById('btn-detail-edit').addEventListener('click', () => {
+      const book = state.currentDetailBook;
+      modals.detail.hide();
+      document.getElementById('bookDetailModal').addEventListener('hidden.bs.modal', function onHidden() {
+        this.removeEventListener('hidden.bs.modal', onHidden);
+        openEditForm(book);
+      });
+    });
+
+    document.getElementById('books-tbody').addEventListener('click', e => {
+      const editBtn = e.target.closest('.btn-edit');
+      const deleteBtn = e.target.closest('.btn-delete');
+      const row = e.target.closest('tr[data-id]');
+
+      if (!row) return;
+      const id = row.dataset.id;
+      const book = state.books.find(b => b.id === id);
+      if (!book) return;
+
+      if (editBtn) {
+        e.stopPropagation();
+        openEditForm(book);
+      } else if (deleteBtn) {
+        e.stopPropagation();
+        openDeleteConfirm(book);
+      } else {
+        showDetail(book);
+      }
+    });
+
+    document.getElementById('search-input').addEventListener('input', e => {
+      const q = e.target.value.toLowerCase().trim();
+      if (!q) {
+        renderBooks(state.books);
+        return;
+      }
+      const filtered = state.books.filter(b =>
+        b.title.toLowerCase().includes(q) ||
+        b.author.toLowerCase().includes(q) ||
+        b.isbn.toLowerCase().includes(q)
+      );
+      renderBooks(filtered);
+    });
+
+    loadBooks();
+  });
+})();
+</script>
+</body>
+</html>
